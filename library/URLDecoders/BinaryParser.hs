@@ -48,7 +48,7 @@ queryByte =
       43 -> return (SpecialQuerySymbol '+')
       63 -> return (SpecialQuerySymbol '&')
       61 -> return (SpecialQuerySymbol '=')
-      37 -> DecodedQuerySymbol <$> (percentEncodedByteBody <|> pure 37)
+      37 -> DecodedQuerySymbol <$> percentEncodedByteBody <|> return (SpecialQuerySymbol '%')
       _ -> return (DecodedQuerySymbol firstByte)
 
 queryChar :: BinaryParser (QuerySymbol Char)
