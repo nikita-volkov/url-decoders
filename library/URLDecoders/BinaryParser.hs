@@ -24,8 +24,8 @@ newtype Value =
 newtype Query =
   Query (A.HashMap Key [Value])
 
-data QuerySymbol a =
-  DecodedQuerySymbol !a | SpecialQuerySymbol !Char
+data QueryChunk a =
+  DecodedQueryChunk !a | SpecialQueryChunk !Char
   deriving (Functor, Show)
 
 query :: BinaryParser Query
@@ -40,33 +40,37 @@ association :: BinaryParser Association
 association =
   undefined
 
-queryByte :: BinaryParser (QuerySymbol Word8)
-queryByte =
+textQueryChunk :: BinaryParser (QueryChunk Text)
+textQueryChunk =
+  undefined
+
+byteQueryChunk :: BinaryParser (QueryChunk Word8)
+byteQueryChunk =
   do
     firstByte <- byte
     case firstByte of
-      43 -> return (SpecialQuerySymbol '+')
-      63 -> return (SpecialQuerySymbol '&')
-      61 -> return (SpecialQuerySymbol '=')
-      37 -> DecodedQuerySymbol <$> percentEncodedByteBody <|> return (SpecialQuerySymbol '%')
-      _ -> return (DecodedQuerySymbol firstByte)
+      43 -> return (SpecialQueryChunk '+')
+      63 -> return (SpecialQueryChunk '&')
+      61 -> return (SpecialQueryChunk '=')
+      37 -> DecodedQueryChunk <$> percentEncodedByteBody <|> return (SpecialQueryChunk '%')
+      _ -> return (DecodedQueryChunk firstByte)
 
-queryChar :: BinaryParser (QuerySymbol Char)
-queryChar =
-  queryByte >>= \case
-    DecodedQuerySymbol x -> DecodedQuerySymbol <$> interpretedUTF8CharDecoderWithByte E.decodeByte x
-    SpecialQuerySymbol x -> return (SpecialQuerySymbol x)
+charQueryChunk :: BinaryParser (QueryChunk Char)
+charQueryChunk =
+  byteQueryChunk >>= \case
+    DecodedQueryChunk x -> DecodedQueryChunk <$> interpretedUTF8CharDecoderWithByte E.decodeByte x
+    SpecialQueryChunk x -> return (SpecialQueryChunk x)
 
 interpretedUTF8CharDecoderWithByte :: E.Decoder -> Word8 -> BinaryParser Char
 interpretedUTF8CharDecoderWithByte decoder x =
   case decoder x of
     E.Unfinished nextDecoder ->
       do
-        nextQueryByte <- queryByte <|> failure "Not enough bytes for a UTF8 sequence"
+        nextQueryByte <- byteQueryChunk <|> failure "Not enough bytes for a UTF8 sequence"
         case nextQueryByte of
-          DecodedQuerySymbol nextByte ->
+          DecodedQueryChunk nextByte ->
             interpretedUTF8CharDecoderWithByte nextDecoder nextByte
-          SpecialQuerySymbol x ->
+          SpecialQueryChunk x ->
             failure ("Unexpected special symbol: " <> (fromString . show) x)
     E.Finished char ->
       return char
