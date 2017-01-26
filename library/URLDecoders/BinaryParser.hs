@@ -18,9 +18,9 @@ data QueryChunk a =
 
 query :: BinaryParser (A.HashMap Text [Text])
 query =
-  process A.empty
+  recur A.empty
   where
-    process map =
+    recur map =
       accumulateKey mempty
       where
         accumulateKey accumulator =
@@ -29,15 +29,15 @@ query =
               DecodedQueryChunk char -> appendChar char
               SpecialQueryChunk char -> case char of
                 '+' -> appendChar ' '
-                '%' -> appendChar '%'
                 '[' -> finalizeArrayDeclaration <|> failure ("Broken array declaration at key \"" <> key <> "\"")
                 '=' -> accumulateValue key mempty
-                '&' -> updateMap key [] True
+                '&' -> updateMapAndRecur key []
+                ';' -> updateMapAndRecur key []
                 ']' -> failure "Unexpected character: \"]\""
                 _ -> appendChar char
             Nothing -> if D.null key
               then return map
-              else updateMap key [] False
+              else updateMap key []
           where
             appendChar char =
               accumulateKey (accumulator <> F.char char)
@@ -46,7 +46,7 @@ query =
                 byteWhichIs 93
                 byte >>= \case
                   61 -> accumulateValue key mempty
-                  63 -> updateMap key [] True
+                  63 -> updateMapAndRecur key []
                   x -> failure ("Unexpected byte: " <> (fromString . show) x)
             key =
               G.charBuilder accumulator
@@ -56,19 +56,19 @@ query =
               DecodedQueryChunk char -> appendChar char
               SpecialQueryChunk char -> case char of
                 '+' -> appendChar ' '
-                '%' -> appendChar '%'
-                '&' -> updateMap key [value] True
+                '&' -> updateMapAndRecur key [value]
+                ';' -> updateMapAndRecur key [value]
                 _ -> appendChar char
-            Nothing -> updateMap key [value] False
+            Nothing -> updateMap key [value]
           where
             appendChar char =
               accumulateValue key (accumulator <> F.char char)
             value =
               G.charBuilder accumulator
-        updateMap key value continue =
-          if continue
-            then process (A.insertWith (<>) key value map)
-            else return map
+        updateMapAndRecur key value =
+          updateMap key value >>= recur
+        updateMap key value =
+          return (A.insertWith (<>) key value map)
 
 byteQueryChunk :: BinaryParser (QueryChunk Word8)
 byteQueryChunk =
@@ -77,10 +77,13 @@ byteQueryChunk =
     case firstByte of
       37 -> DecodedQueryChunk <$> percentEncodedByteBody <|> return (SpecialQueryChunk '%')
       43 -> return (SpecialQueryChunk '+')
-      63 -> return (SpecialQueryChunk '&')
+      38 -> return (SpecialQueryChunk '&')
+      59 -> return (SpecialQueryChunk ';')
       61 -> return (SpecialQueryChunk '=')
       91 -> return (SpecialQueryChunk '[')
       93 -> return (SpecialQueryChunk ']')
+      35 -> failure ("Invalid query character: \"#\"")
+      63 -> failure ("Invalid query character: \"?\"")
       _ -> return (DecodedQueryChunk firstByte)
 
 charQueryChunk :: BinaryParser (QueryChunk Char)
