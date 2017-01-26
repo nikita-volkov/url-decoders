@@ -12,23 +12,13 @@ import qualified Text.Builder.Char as F
 import qualified Text.Builder.StrictText as G
 
 
-newtype Key =
-  Key Text
-  deriving (Eq, Hashable)
-
-newtype Value =
-  Value Text
-
-newtype Query =
-  Query (A.HashMap Key [Value])
-
 data QueryChunk a =
   DecodedQueryChunk !a | SpecialQueryChunk !Char
   deriving (Functor, Show)
 
-query :: BinaryParser Query
+query :: BinaryParser (A.HashMap Text [Text])
 query =
-  fmap Query (process A.empty)
+  process A.empty
   where
     process map =
       accumulateKey mempty
@@ -77,7 +67,7 @@ query =
               G.charBuilder accumulator
         updateMap key value continue =
           if continue
-            then process (A.insertWith (<>) (Key key) (fmap Value value) map)
+            then process (A.insertWith (<>) key value map)
             else return map
 
 byteQueryChunk :: BinaryParser (QueryChunk Word8)
