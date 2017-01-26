@@ -6,6 +6,7 @@ import Data.Text (Text)
 import qualified Data.HashMap.Strict as A
 import qualified Data.ByteString as C
 import qualified Data.Text as D
+import qualified URLDecoders.UTF8CharDecoder as E
 
 
 data Association =
@@ -23,8 +24,9 @@ newtype Value =
 newtype Query =
   Query (A.HashMap Key [Value])
 
-data QueryChar =
-  Ampersand | Equals | DecodedChar !Char
+data QuerySymbol a =
+  DecodedQuerySymbol !a | AmpersandQuerySymbol | EqualsQuerySymbol | PlusQuerySymbol
+  deriving (Functor, Show)
 
 query :: BinaryParser Query
 query =
@@ -38,45 +40,60 @@ association :: BinaryParser Association
 association =
   undefined
 
-ampersand :: BinaryParser ()
-ampersand =
-  byteIs 63
-
-equals :: BinaryParser ()
-equals =
-  byteIs 61
-
-nonSpecialChar :: BinaryParser ()
-nonSpecialChar =
-  undefined
-
-queryChar :: BinaryParser QueryChar
-queryChar =
+queryByte :: BinaryParser (QuerySymbol Word8)
+queryByte =
   do
     firstByte <- byte
     case firstByte of
-      63 -> return Ampersand
-      61 -> return Equals
-      _ -> DecodedChar <$> consumeUTF8CharWithFirstByte firstByte
+      43 -> return PlusQuerySymbol
+      63 -> return AmpersandQuerySymbol
+      61 -> return EqualsQuerySymbol
+      37 -> DecodedQuerySymbol <$> (percentEncodedByteBody <|> pure 37)
+      _ -> return (DecodedQuerySymbol firstByte)
 
-consumeUTF8CharWithFirstByte :: Word8 -> BinaryParser Char
-consumeUTF8CharWithFirstByte =
-  \case
-    43 -> return ' '
-    -- 37 -> percentEncodedByte
+queryChar :: BinaryParser (QuerySymbol Char)
+queryChar =
+  queryByte >>= \case
+    DecodedQuerySymbol x -> DecodedQuerySymbol <$> interpretedUTF8CharDecoderWithByte E.decodeByte x
+    x -> return (unsafeCoerce x)
 
+interpretedUTF8CharDecoderWithByte :: E.Decoder -> Word8 -> BinaryParser Char
+interpretedUTF8CharDecoderWithByte decoder x =
+  case decoder x of
+    E.Unfinished nextDecoder ->
+      do
+        nextQueryByte <- queryByte <|> failure "Not enough bytes for a UTF8 sequence"
+        case nextQueryByte of
+          DecodedQuerySymbol nextByte ->
+            interpretedUTF8CharDecoderWithByte nextDecoder nextByte
+          x ->
+            failure ("Unexpected special symbol: " <> (fromString . show) x)
+    E.Finished char ->
+      return char
+    E.Failed byte1 byte2 byte3 byte4 ->
+      failure ("Improper UTF8 byte sequence: " <> foldMap (fromString . show) [byte1, byte2, byte3, byte4])
 
-char :: BinaryParser Char
-char =
-  undefined
+percentEncodedByteBody :: BinaryParser Word8
+percentEncodedByteBody =
+  combine <$> hexByte <*> hexByte
+  where
+    combine l r =
+      shiftL l 4 .|. r
 
-byteIs :: Word8 -> BinaryParser ()
-byteIs expected =
+hexByte :: BinaryParser Word8
+hexByte =
+  do
+    x <- byte
+    if x >= 48 && x <= 57
+      then return (x - 48)
+      else if x >= 65 && x <= 70
+        then return (x - 55)
+        else if x >= 97 && x <= 102
+          then return (x - 87)
+          else failure ("Not a hexadecimal byte: " <> (fromString . show) x)
+
+byteWhichIs :: Word8 -> BinaryParser ()
+byteWhichIs expected =
   do
     actual <- byte
     unless (actual == expected) (failure ("Byte " <> (fromString . show) actual <> " doesn't equal the expected " <> (fromString . show) expected))
-
-
-
--- newtype UTF8CharDecoder =
---   UTF8CharDecoder (Word8 -> Either (Word8 -> ))
