@@ -59,7 +59,10 @@ charQueryChunk :: BinaryParser (QueryChunk Char)
 charQueryChunk =
   byteQueryChunk >>= \case
     DecodedQueryChunk x -> DecodedQueryChunk <$> interpretedUTF8CharDecoderWithByte E.decodeByte x
-    SpecialQueryChunk x -> return (SpecialQueryChunk x)
+    SpecialQueryChunk x -> case x of
+      '+' -> return (DecodedQueryChunk ' ')
+      '%' -> return (DecodedQueryChunk '%')
+      _ -> return (SpecialQueryChunk x)
 
 interpretedUTF8CharDecoderWithByte :: E.Decoder -> Word8 -> BinaryParser Char
 interpretedUTF8CharDecoderWithByte decoder x =
