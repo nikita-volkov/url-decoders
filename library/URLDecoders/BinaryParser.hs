@@ -8,8 +8,7 @@ import qualified Data.HashMap.Strict as A
 import qualified Data.ByteString as C
 import qualified Data.Text as D
 import qualified URLDecoders.UTF8CharDecoder as E
-import qualified Text.Builder.Char as F
-import qualified Text.Builder.StrictText as G
+import qualified Text.Builder as F
 
 
 data QueryChunk a =
@@ -49,7 +48,7 @@ query =
                   63 -> updateMapAndRecur key []
                   x -> failure ("Unexpected byte: " <> (fromString . show) x)
             key =
-              G.charBuilder accumulator
+              F.run accumulator
         accumulateValue key accumulator =
           optional charQueryChunk >>= \case
             Just x -> case x of
@@ -64,7 +63,7 @@ query =
             appendChar char =
               accumulateValue key (accumulator <> F.char char)
             value =
-              G.charBuilder accumulator
+              F.run accumulator
         updateMapAndRecur key value =
           updateMap key value >>= recur
         updateMap key value =
