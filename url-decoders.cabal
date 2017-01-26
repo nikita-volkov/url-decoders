@@ -37,6 +37,7 @@ library
   exposed-modules:
     URLDecoders
   other-modules:
+    URLDecoders.UTF8CharDecoder
     URLDecoders.BinaryParser
     URLDecoders.Text
     URLDecoders.Text.Stream
