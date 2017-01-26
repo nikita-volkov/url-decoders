@@ -25,7 +25,7 @@ newtype Query =
   Query (A.HashMap Key [Value])
 
 data QuerySymbol a =
-  DecodedQuerySymbol !a | AmpersandQuerySymbol | EqualsQuerySymbol | PlusQuerySymbol
+  DecodedQuerySymbol !a | SpecialQuerySymbol !Char
   deriving (Functor, Show)
 
 query :: BinaryParser Query
@@ -45,9 +45,9 @@ queryByte =
   do
     firstByte <- byte
     case firstByte of
-      43 -> return PlusQuerySymbol
-      63 -> return AmpersandQuerySymbol
-      61 -> return EqualsQuerySymbol
+      43 -> return (SpecialQuerySymbol '+')
+      63 -> return (SpecialQuerySymbol '&')
+      61 -> return (SpecialQuerySymbol '=')
       37 -> DecodedQuerySymbol <$> (percentEncodedByteBody <|> pure 37)
       _ -> return (DecodedQuerySymbol firstByte)
 
@@ -55,7 +55,7 @@ queryChar :: BinaryParser (QuerySymbol Char)
 queryChar =
   queryByte >>= \case
     DecodedQuerySymbol x -> DecodedQuerySymbol <$> interpretedUTF8CharDecoderWithByte E.decodeByte x
-    x -> return (unsafeCoerce x)
+    SpecialQuerySymbol x -> return (SpecialQuerySymbol x)
 
 interpretedUTF8CharDecoderWithByte :: E.Decoder -> Word8 -> BinaryParser Char
 interpretedUTF8CharDecoderWithByte decoder x =
@@ -66,7 +66,7 @@ interpretedUTF8CharDecoderWithByte decoder x =
         case nextQueryByte of
           DecodedQuerySymbol nextByte ->
             interpretedUTF8CharDecoderWithByte nextDecoder nextByte
-          x ->
+          SpecialQuerySymbol x ->
             failure ("Unexpected special symbol: " <> (fromString . show) x)
     E.Finished char ->
       return char
