@@ -30,13 +30,13 @@ query =
                 '+' -> appendDecodedChar ' '
                 '[' -> finalizeArrayDeclaration <|> failure ("Broken array declaration at key \"" <> key <> "\"")
                 '=' -> accumulateValue key mempty
-                '&' -> updateMapAndRecur key []
-                ';' -> updateMapAndRecur key []
+                '&' -> recur (updatedMap key [])
+                ';' -> recur (updatedMap key [])
                 ']' -> failure "Unexpected character: \"]\""
                 _ -> appendDecodedChar char
             Nothing -> if D.null key
               then return map
-              else updateMap key []
+              else return (updatedMap key [])
           where
             appendDecodedChar char =
               accumulateKey (accumulator <> F.char char)
@@ -45,7 +45,7 @@ query =
                 byteWhichIs 93
                 byte >>= \case
                   61 -> accumulateValue key mempty
-                  63 -> updateMapAndRecur key []
+                  63 -> recur (updatedMap key [])
                   x -> failure ("Unexpected byte: " <> (fromString . show) x)
             key =
               F.run accumulator
@@ -55,19 +55,17 @@ query =
               DecodedQueryChunk char -> appendDecodedChar char
               SpecialQueryChunk char -> case char of
                 '+' -> appendDecodedChar ' '
-                '&' -> updateMapAndRecur key [value]
-                ';' -> updateMapAndRecur key [value]
+                '&' -> recur (updatedMap key [value])
+                ';' -> recur (updatedMap key [value])
                 _ -> appendDecodedChar char
-            Nothing -> updateMap key [value]
+            Nothing -> return (updatedMap key [value])
           where
             appendDecodedChar char =
               accumulateValue key (accumulator <> F.char char)
             value =
               F.run accumulator
-        updateMapAndRecur key value =
-          updateMap key value >>= recur
-        updateMap key value =
-          return (A.insertWith (<>) key value map)
+        updatedMap key value =
+          A.insertWith (<>) key value map
 
 {-# INLINE byteQueryChunk #-}
 byteQueryChunk :: BinaryParser (QueryChunk Word8)
