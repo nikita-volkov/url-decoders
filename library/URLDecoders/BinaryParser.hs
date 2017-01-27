@@ -3,51 +3,53 @@ module URLDecoders.BinaryParser where
 import BasePrelude
 import BinaryParser
 import Data.Text (Text)
+import Data.ByteString (ByteString)
 import qualified Data.HashMap.Strict as A
 import qualified Data.ByteString as C
 import qualified Data.Text as D
 import qualified Data.Text.Encoding as E
 import qualified Data.Text.Encoding.Error as F
+import qualified URLDecoders.ByteString as G
 
 
 data QueryChunk a =
   DecodedQueryChunk !a | SpecialQueryChunk !a
   deriving (Functor, Show)
 
-{-# INLINE query #-}
+{-# NOINLINE query #-}
 query :: BinaryParser (A.HashMap Text [Text])
 query =
   recur A.empty
   where
     recur map =
-      accumulateKey mempty
+      accumulateKey 0 []
       where
-        accumulateKey accumulator =
+        accumulateKey length bytes =
           optional byteQueryChunk >>= \case
             Just x -> case x of
               DecodedQueryChunk byte -> addByte byte
               SpecialQueryChunk byte -> case byte of
-                61 -> accumulateValue key mempty
+                61 -> accumulateValue key 0 []
                 38 -> recur (updatedMap key [])
                 91 -> finalizeArrayDeclaration <|> failure ("Broken array declaration at key \"" <> key <> "\"")
                 93 -> failure "Unexpected character: \"]\""
                 _ -> addByte byte
-            Nothing -> if D.null key
+            Nothing -> if length == 0
               then return map
               else return (updatedMap key [])
           where
             addByte byte =
-              accumulateKey (byte : accumulator)
+              accumulateKey (succ length) (byte : bytes)
             finalizeArrayDeclaration =
               do
                 byteWhichIs 93
                 byte >>= \case
-                  61 -> accumulateValue key mempty
+                  61 -> accumulateValue key 0 []
                   63 -> recur (updatedMap key [])
                   x -> failure ("Unexpected byte: " <> (fromString . show) x)
             key =
-              E.decodeUtf8With F.lenientDecode (C.pack (reverse accumulator))
-        accumulateValue key accumulator =
+              E.decodeUtf8With F.lenientDecode (G.packReverseBytesWithLength length bytes)
+        accumulateValue key length bytes =
           optional byteQueryChunk >>= \case
             Just x -> case x of
               DecodedQueryChunk byte -> appendDecodedChar byte
@@ -57,11 +59,18 @@ query =
             Nothing -> return (updatedMap key [value])
           where
             appendDecodedChar byte =
-              accumulateValue key (byte : accumulator)
+              accumulateValue key (succ length) (byte : bytes)
             value =
-              E.decodeUtf8With F.lenientDecode (C.pack (reverse accumulator))
+              E.decodeUtf8With F.lenientDecode (G.packReverseBytesWithLength length bytes)
         updatedMap key value =
           A.insertWith (<>) key value map
+
+{-# INLINE decodeUTF8 #-}
+decodeUTF8 :: ByteString -> BinaryParser Text
+decodeUTF8 bytes =
+  case E.decodeUtf8' bytes of
+    Left _ -> failure "Broken UTF8 sequence"
+    Right text -> return text
 
 {-# INLINE specialOrDecodedByte #-}
 specialOrDecodedByte :: (Word8 -> BinaryParser a) -> (Word8 -> BinaryParser a) -> BinaryParser a
