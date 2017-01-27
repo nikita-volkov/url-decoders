@@ -6,12 +6,12 @@ import Data.Text (Text)
 import qualified Data.HashMap.Strict as A
 import qualified Data.ByteString as C
 import qualified Data.Text as D
-import qualified URLDecoders.UTF8CharDecoder as E
-import qualified Text.Builder as F
+import qualified Data.Text.Encoding as E
+import qualified Data.Text.Encoding.Error as F
 
 
 data QueryChunk a =
-  DecodedQueryChunk !a | SpecialQueryChunk !Char
+  DecodedQueryChunk !a | SpecialQueryChunk !a
   deriving (Functor, Show)
 
 {-# INLINE query #-}
@@ -23,23 +23,21 @@ query =
       accumulateKey mempty
       where
         accumulateKey accumulator =
-          optional charQueryChunk >>= \case
+          optional byteQueryChunk >>= \case
             Just x -> case x of
-              DecodedQueryChunk char -> appendDecodedChar char
-              SpecialQueryChunk char -> case char of
-                '+' -> appendDecodedChar ' '
-                '[' -> finalizeArrayDeclaration <|> failure ("Broken array declaration at key \"" <> key <> "\"")
-                '=' -> accumulateValue key mempty
-                '&' -> recur (updatedMap key [])
-                ';' -> recur (updatedMap key [])
-                ']' -> failure "Unexpected character: \"]\""
-                _ -> appendDecodedChar char
+              DecodedQueryChunk byte -> addByte byte
+              SpecialQueryChunk byte -> case byte of
+                61 -> accumulateValue key mempty
+                38 -> recur (updatedMap key [])
+                91 -> finalizeArrayDeclaration <|> failure ("Broken array declaration at key \"" <> key <> "\"")
+                93 -> failure "Unexpected character: \"]\""
+                _ -> addByte byte
             Nothing -> if D.null key
               then return map
               else return (updatedMap key [])
           where
-            appendDecodedChar char =
-              accumulateKey (accumulator <> F.char char)
+            addByte byte =
+              accumulateKey (byte : accumulator)
             finalizeArrayDeclaration =
               do
                 byteWhichIs 93
@@ -48,24 +46,37 @@ query =
                   63 -> recur (updatedMap key [])
                   x -> failure ("Unexpected byte: " <> (fromString . show) x)
             key =
-              F.run accumulator
+              E.decodeUtf8With F.lenientDecode (C.pack (reverse accumulator))
         accumulateValue key accumulator =
-          optional charQueryChunk >>= \case
+          optional byteQueryChunk >>= \case
             Just x -> case x of
-              DecodedQueryChunk char -> appendDecodedChar char
-              SpecialQueryChunk char -> case char of
-                '+' -> appendDecodedChar ' '
-                '&' -> recur (updatedMap key [value])
-                ';' -> recur (updatedMap key [value])
-                _ -> appendDecodedChar char
+              DecodedQueryChunk byte -> appendDecodedChar byte
+              SpecialQueryChunk byte -> case byte of
+                38 -> recur (updatedMap key [value])
+                _ -> appendDecodedChar byte
             Nothing -> return (updatedMap key [value])
           where
-            appendDecodedChar char =
-              accumulateValue key (accumulator <> F.char char)
+            appendDecodedChar byte =
+              accumulateValue key (byte : accumulator)
             value =
-              F.run accumulator
+              E.decodeUtf8With F.lenientDecode (C.pack (reverse accumulator))
         updatedMap key value =
           A.insertWith (<>) key value map
+
+{-# INLINE specialOrDecodedByte #-}
+specialOrDecodedByte :: (Word8 -> BinaryParser a) -> (Word8 -> BinaryParser a) -> BinaryParser a
+specialOrDecodedByte special decoded =
+  byte >>= \case
+    37 -> (percentEncodedByteBody >>= decoded) <|> special 37
+    43 -> decoded 32
+    38 -> special 38
+    59 -> special 38
+    61 -> special 61
+    91 -> special 91
+    93 -> special 93
+    35 -> failure ("Invalid query character: \"#\"")
+    63 -> failure ("Invalid query character: \"?\"")
+    x -> decoded x
 
 {-# INLINE byteQueryChunk #-}
 byteQueryChunk :: BinaryParser (QueryChunk Word8)
@@ -73,35 +84,16 @@ byteQueryChunk =
   do
     firstByte <- byte
     case firstByte of
-      37 -> DecodedQueryChunk <$> percentEncodedByteBody <|> return (SpecialQueryChunk '%')
-      43 -> return (SpecialQueryChunk '+')
-      38 -> return (SpecialQueryChunk '&')
-      59 -> return (SpecialQueryChunk ';')
-      61 -> return (SpecialQueryChunk '=')
-      91 -> return (SpecialQueryChunk '[')
-      93 -> return (SpecialQueryChunk ']')
+      37 -> DecodedQueryChunk <$> percentEncodedByteBody <|> return (SpecialQueryChunk 37)
+      43 -> return (DecodedQueryChunk 32)
+      38 -> return (SpecialQueryChunk 38)
+      59 -> return (SpecialQueryChunk 38)
+      61 -> return (SpecialQueryChunk 61)
+      91 -> return (SpecialQueryChunk 91)
+      93 -> return (SpecialQueryChunk 93)
       35 -> failure ("Invalid query character: \"#\"")
       63 -> failure ("Invalid query character: \"?\"")
       _ -> return (DecodedQueryChunk firstByte)
-
-{-# INLINE charQueryChunk #-}
-charQueryChunk :: BinaryParser (QueryChunk Char)
-charQueryChunk =
-  byteQueryChunk >>= \case
-    DecodedQueryChunk x -> do
-      E.decodeCharMonadicallyHavingFirstByte x nextUTF8Byte >>= \case
-        Just char -> return (DecodedQueryChunk char)
-        Nothing -> failure "Invalid UTF8 byte sequence"
-    SpecialQueryChunk x -> return (SpecialQueryChunk x)
-  where
-    nextUTF8Byte =
-      do
-        nextQueryByte <- byteQueryChunk <|> failure "Not enough bytes for a UTF8 sequence"
-        case nextQueryByte of
-          DecodedQueryChunk byte ->
-            return byte
-          SpecialQueryChunk x ->
-            failure ("Unexpected special symbol: " <> (fromString . show) x)
 
 {-# INLINE percentEncodedByteBody #-}
 percentEncodedByteBody :: BinaryParser Word8
