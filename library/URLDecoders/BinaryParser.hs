@@ -16,7 +16,7 @@ import qualified URLDecoders.PercentEncoding as H
 data QueryByte =
   DecodedQueryByte !Word8 | SpecialQueryByte !Word8
 
-{-# NOINLINE query #-}
+{-# INLINE query #-}
 query :: BinaryParser (A.HashMap Text [Text])
 query =
   recur A.empty
