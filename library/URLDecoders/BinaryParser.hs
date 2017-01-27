@@ -75,7 +75,7 @@ decodeUTF8 bytes =
 specialOrDecodedByte :: (Word8 -> BinaryParser a) -> (Word8 -> BinaryParser a) -> BinaryParser a
 specialOrDecodedByte special decoded =
   byte >>= \case
-    37 -> (percentEncodedByteBody >>= decoded) <|> special 37
+    37 -> possiblePercentEncodedByteBody (\_ _ -> failure "Broken percent encoding") decoded
     43 -> decoded 32
     38 -> special 38
     59 -> special 38
@@ -92,7 +92,7 @@ queryByte =
   do
     firstByte <- byte
     case firstByte of
-      37 -> DecodedQueryByte <$> percentEncodedByteBody <|> return (SpecialQueryByte 37)
+      37 -> possiblePercentEncodedByteBody (\_ _ -> failure "Broken percent encoding") (return . DecodedQueryByte)
       43 -> return (DecodedQueryByte 32)
       38 -> return (SpecialQueryByte 38)
       59 -> return (SpecialQueryByte 38)
@@ -103,26 +103,35 @@ queryByte =
       63 -> failure ("Invalid query character: \"?\"")
       _ -> return (DecodedQueryByte firstByte)
 
-{-# INLINE percentEncodedByteBody #-}
-percentEncodedByteBody :: BinaryParser Word8
-percentEncodedByteBody =
-  combine <$> hexByte <*> hexByte
+{-# INLINE possiblePercentEncodedByteBody #-}
+possiblePercentEncodedByteBody :: (Word8 -> Word8 -> BinaryParser a) -> (Word8 -> BinaryParser a) -> BinaryParser a
+possiblePercentEncodedByteBody failed succeeded =
+  possibleHexByte failedFirstByte succeededFirstByte
   where
-    combine l r =
-      shiftL l 4 .|. r
+    failedFirstByte byte1 =
+      do
+        byte2 <- byte
+        failed byte1 byte2
+    succeededFirstByte byte1 =
+      possibleHexByte failedSecondByte succeededSecondByte
+      where
+        failedSecondByte byte2 =
+          failed byte1 byte2
+        succeededSecondByte byte2 =
+          succeeded (shiftL byte1 4 .|. byte2)
 
-{-# INLINE hexByte #-}
-hexByte :: BinaryParser Word8
-hexByte =
+{-# INLINE possibleHexByte #-}
+possibleHexByte :: (Word8 -> BinaryParser a) -> (Word8 -> BinaryParser a) -> BinaryParser a
+possibleHexByte failed succeeded =
   do
     x <- byte
     if x >= 48 && x <= 57
-      then return (x - 48)
+      then succeeded (x - 48)
       else if x >= 65 && x <= 70
-        then return (x - 55)
+        then succeeded (x - 55)
         else if x >= 97 && x <= 102
-          then return (x - 87)
-          else failure ("Not a hexadecimal byte: " <> (fromString . show) x)
+          then succeeded (x - 87)
+          else failed x
 
 {-# INLINE byteWhichIs #-}
 byteWhichIs :: Word8 -> BinaryParser ()
