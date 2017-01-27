@@ -6,34 +6,34 @@ import qualified Data.Text.Internal.Encoding.Utf8 as A
 import qualified Data.Text.Internal.Unsafe.Char as B
 
 
-data Decoding =
-  Finished !Char |
-  Unfinished !Decoder |
-  Failed !Word8 !Word8 !Word8 !Word8
+{-|
+Given an effect, which provides the next byte, produces a decoded Char.
+-}
+{-# INLINE decodeCharMonadically #-}
+decodeCharMonadically :: Monad m => m Word8 -> m (Maybe Char)
+decodeCharMonadically getNextByte =
+  do
+    byte1 <- getNextByte
+    decodeCharMonadicallyHavingFirstByte byte1 getNextByte
 
-type Decoder =
-  Word8 -> Decoding
-
-{-# INLINE decodeByte #-}
-decodeByte :: Decoder
-decodeByte byte1 =
+{-|
+Given an effect, which provides the next byte, produces a decoded Char.
+-}
+{-# INLINE decodeCharMonadicallyHavingFirstByte #-}
+decodeCharMonadicallyHavingFirstByte :: Monad m => Word8 -> m Word8 -> m (Maybe Char)
+decodeCharMonadicallyHavingFirstByte byte1 getNextByte =
   if A.validate1 byte1
-    then
-      Finished (B.unsafeChr8 byte1)
-    else
-      Unfinished $ \byte2 ->
-        if A.validate2 byte1 byte2
-          then
-            Finished (A.chr2 byte1 byte2)
-          else
-            Unfinished $ \byte3 ->
-              if A.validate3 byte1 byte2 byte3
-                then
-                  Finished (A.chr3 byte1 byte2 byte3)
-                else
-                  Unfinished $ \byte4 ->
-                    if A.validate4 byte1 byte2 byte3 byte4
-                      then
-                        Finished (A.chr4 byte1 byte2 byte3 byte4)
-                      else
-                        Failed byte1 byte2 byte3 byte4
+    then return (Just (B.unsafeChr8 byte1))
+    else do
+      byte2 <- getNextByte
+      if A.validate2 byte1 byte2
+        then return (Just (A.chr2 byte1 byte2))
+        else do
+          byte3 <- getNextByte
+          if A.validate3 byte1 byte2 byte3
+            then return (Just (A.chr3 byte1 byte2 byte3))
+            else do
+              byte4 <- getNextByte
+              if A.validate4 byte1 byte2 byte3 byte4
+                then return (Just (A.chr4 byte1 byte2 byte3 byte4))
+                else return Nothing

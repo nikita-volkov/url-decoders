@@ -90,25 +90,20 @@ byteQueryChunk =
 charQueryChunk :: BinaryParser (QueryChunk Char)
 charQueryChunk =
   byteQueryChunk >>= \case
-    DecodedQueryChunk x -> DecodedQueryChunk <$> interpretedUTF8CharDecoderWithByte E.decodeByte x
+    DecodedQueryChunk x -> do
+      E.decodeCharMonadicallyHavingFirstByte x nextUTF8Byte >>= \case
+        Just char -> return (DecodedQueryChunk char)
+        Nothing -> failure "Invalid UTF8 byte sequence"
     SpecialQueryChunk x -> return (SpecialQueryChunk x)
-
-{-# INLINE interpretedUTF8CharDecoderWithByte #-}
-interpretedUTF8CharDecoderWithByte :: E.Decoder -> Word8 -> BinaryParser Char
-interpretedUTF8CharDecoderWithByte decoder x =
-  case decoder x of
-    E.Unfinished nextDecoder ->
+  where
+    nextUTF8Byte =
       do
         nextQueryByte <- byteQueryChunk <|> failure "Not enough bytes for a UTF8 sequence"
         case nextQueryByte of
-          DecodedQueryChunk nextByte ->
-            interpretedUTF8CharDecoderWithByte nextDecoder nextByte
+          DecodedQueryChunk byte ->
+            return byte
           SpecialQueryChunk x ->
             failure ("Unexpected special symbol: " <> (fromString . show) x)
-    E.Finished char ->
-      return char
-    E.Failed byte1 byte2 byte3 byte4 ->
-      failure ("Invalid UTF8 byte sequence: " <> foldMap (fromString . show) [byte1, byte2, byte3, byte4])
 
 {-# INLINE percentEncodedByteBody #-}
 percentEncodedByteBody :: BinaryParser Word8
