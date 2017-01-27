@@ -22,14 +22,14 @@ query =
   recur A.empty
   where
     recur map =
-      accumulateKey 0 []
+      accumulateKey []
       where
-        accumulateKey length bytes =
+        accumulateKey bytes =
           optional byteQueryChunk >>= \case
             Just x -> case x of
               DecodedQueryChunk byte -> addByte byte
               SpecialQueryChunk byte -> case byte of
-                61 -> accumulateValue key 0 []
+                61 -> accumulateValue key []
                 38 -> recur (updatedMap key [])
                 91 -> finalizeArrayDeclaration <|> failure ("Broken array declaration at key \"" <> key <> "\"")
                 93 -> failure "Unexpected character: \"]\""
@@ -39,17 +39,19 @@ query =
               else return (updatedMap key [])
           where
             addByte byte =
-              accumulateKey (succ length) (byte : bytes)
+              accumulateKey (byte : bytes)
             finalizeArrayDeclaration =
               do
                 byteWhichIs 93
                 byte >>= \case
-                  61 -> accumulateValue key 0 []
+                  61 -> accumulateValue key []
                   63 -> recur (updatedMap key [])
                   x -> failure ("Unexpected byte: " <> (fromString . show) x)
+            length =
+              BasePrelude.length bytes
             key =
               E.decodeUtf8With F.lenientDecode (G.packReverseBytesWithLength length bytes)
-        accumulateValue key length bytes =
+        accumulateValue key bytes =
           optional byteQueryChunk >>= \case
             Just x -> case x of
               DecodedQueryChunk byte -> appendDecodedChar byte
@@ -59,7 +61,9 @@ query =
             Nothing -> return (updatedMap key [value])
           where
             appendDecodedChar byte =
-              accumulateValue key (succ length) (byte : bytes)
+              accumulateValue key (byte : bytes)
+            length =
+              BasePrelude.length bytes
             value =
               E.decodeUtf8With F.lenientDecode (G.packReverseBytesWithLength length bytes)
         updatedMap key value =
