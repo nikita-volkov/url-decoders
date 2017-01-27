@@ -25,20 +25,20 @@ query =
         accumulateKey accumulator =
           optional charQueryChunk >>= \case
             Just x -> case x of
-              DecodedQueryChunk char -> appendChar char
+              DecodedQueryChunk char -> appendDecodedChar char
               SpecialQueryChunk char -> case char of
-                '+' -> appendChar ' '
+                '+' -> appendDecodedChar ' '
                 '[' -> finalizeArrayDeclaration <|> failure ("Broken array declaration at key \"" <> key <> "\"")
                 '=' -> accumulateValue key mempty
                 '&' -> updateMapAndRecur key []
                 ';' -> updateMapAndRecur key []
                 ']' -> failure "Unexpected character: \"]\""
-                _ -> appendChar char
+                _ -> appendDecodedChar char
             Nothing -> if D.null key
               then return map
               else updateMap key []
           where
-            appendChar char =
+            appendDecodedChar char =
               accumulateKey (accumulator <> F.char char)
             finalizeArrayDeclaration =
               do
@@ -52,15 +52,15 @@ query =
         accumulateValue key accumulator =
           optional charQueryChunk >>= \case
             Just x -> case x of
-              DecodedQueryChunk char -> appendChar char
+              DecodedQueryChunk char -> appendDecodedChar char
               SpecialQueryChunk char -> case char of
-                '+' -> appendChar ' '
+                '+' -> appendDecodedChar ' '
                 '&' -> updateMapAndRecur key [value]
                 ';' -> updateMapAndRecur key [value]
-                _ -> appendChar char
+                _ -> appendDecodedChar char
             Nothing -> updateMap key [value]
           where
-            appendChar char =
+            appendDecodedChar char =
               accumulateValue key (accumulator <> F.char char)
             value =
               F.run accumulator
