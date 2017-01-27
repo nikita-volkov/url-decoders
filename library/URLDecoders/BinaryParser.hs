@@ -3,7 +3,6 @@ module URLDecoders.BinaryParser where
 import BasePrelude
 import BinaryParser
 import Data.Text (Text)
-import Data.Hashable (Hashable)
 import qualified Data.HashMap.Strict as A
 import qualified Data.ByteString as C
 import qualified Data.Text as D
