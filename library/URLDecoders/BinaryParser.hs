@@ -108,7 +108,7 @@ interpretedUTF8CharDecoderWithByte decoder x =
     E.Finished char ->
       return char
     E.Failed byte1 byte2 byte3 byte4 ->
-      failure ("Improper UTF8 byte sequence: " <> foldMap (fromString . show) [byte1, byte2, byte3, byte4])
+      failure ("Invalid UTF8 byte sequence: " <> foldMap (fromString . show) [byte1, byte2, byte3, byte4])
 
 {-# INLINE percentEncodedByteBody #-}
 percentEncodedByteBody :: BinaryParser Word8
