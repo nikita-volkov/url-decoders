@@ -12,9 +12,8 @@ import qualified Data.Text.Encoding.Error as F
 import qualified URLDecoders.ByteString as G
 
 
-data QueryChunk a =
-  DecodedQueryChunk !a | SpecialQueryChunk !a
-  deriving (Functor, Show)
+data QueryByte =
+  DecodedQueryByte !Word8 | SpecialQueryByte !Word8
 
 {-# NOINLINE query #-}
 query :: BinaryParser (A.HashMap Text [Text])
@@ -25,10 +24,10 @@ query =
       accumulateKey []
       where
         accumulateKey bytes =
-          optional byteQueryChunk >>= \case
+          optional queryByte >>= \case
             Just x -> case x of
-              DecodedQueryChunk byte -> addByte byte
-              SpecialQueryChunk byte -> case byte of
+              DecodedQueryByte byte -> addByte byte
+              SpecialQueryByte byte -> case byte of
                 61 -> accumulateValue key []
                 38 -> recur (updatedMap key [])
                 91 -> finalizeArrayDeclaration <|> failure ("Broken array declaration at key \"" <> key <> "\"")
@@ -52,10 +51,10 @@ query =
             key =
               E.decodeUtf8With F.lenientDecode (G.packReverseBytesWithLength length bytes)
         accumulateValue key bytes =
-          optional byteQueryChunk >>= \case
+          optional queryByte >>= \case
             Just x -> case x of
-              DecodedQueryChunk byte -> appendDecodedChar byte
-              SpecialQueryChunk byte -> case byte of
+              DecodedQueryByte byte -> appendDecodedChar byte
+              SpecialQueryByte byte -> case byte of
                 38 -> recur (updatedMap key [value])
                 _ -> appendDecodedChar byte
             Nothing -> return (updatedMap key [value])
@@ -91,22 +90,22 @@ specialOrDecodedByte special decoded =
     63 -> failure ("Invalid query character: \"?\"")
     x -> decoded x
 
-{-# INLINE byteQueryChunk #-}
-byteQueryChunk :: BinaryParser (QueryChunk Word8)
-byteQueryChunk =
+{-# INLINE queryByte #-}
+queryByte :: BinaryParser QueryByte
+queryByte =
   do
     firstByte <- byte
     case firstByte of
-      37 -> DecodedQueryChunk <$> percentEncodedByteBody <|> return (SpecialQueryChunk 37)
-      43 -> return (DecodedQueryChunk 32)
-      38 -> return (SpecialQueryChunk 38)
-      59 -> return (SpecialQueryChunk 38)
-      61 -> return (SpecialQueryChunk 61)
-      91 -> return (SpecialQueryChunk 91)
-      93 -> return (SpecialQueryChunk 93)
+      37 -> DecodedQueryByte <$> percentEncodedByteBody <|> return (SpecialQueryByte 37)
+      43 -> return (DecodedQueryByte 32)
+      38 -> return (SpecialQueryByte 38)
+      59 -> return (SpecialQueryByte 38)
+      61 -> return (SpecialQueryByte 61)
+      91 -> return (SpecialQueryByte 91)
+      93 -> return (SpecialQueryByte 93)
       35 -> failure ("Invalid query character: \"#\"")
       63 -> failure ("Invalid query character: \"?\"")
-      _ -> return (DecodedQueryChunk firstByte)
+      _ -> return (DecodedQueryByte firstByte)
 
 {-# INLINE percentEncodedByteBody #-}
 percentEncodedByteBody :: BinaryParser Word8
