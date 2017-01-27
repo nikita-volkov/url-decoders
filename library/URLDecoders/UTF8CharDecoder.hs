@@ -14,6 +14,7 @@ data Decoding =
 type Decoder =
   Word8 -> Decoding
 
+{-# INLINE decodeByte #-}
 decodeByte :: Word8 -> Decoding
 decodeByte byte1 =
   if A.validate1 byte1

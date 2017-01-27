@@ -14,6 +14,7 @@ data QueryChunk a =
   DecodedQueryChunk !a | SpecialQueryChunk !Char
   deriving (Functor, Show)
 
+{-# INLINE query #-}
 query :: BinaryParser (A.HashMap Text [Text])
 query =
   recur A.empty
@@ -68,6 +69,7 @@ query =
         updateMap key value =
           return (A.insertWith (<>) key value map)
 
+{-# INLINE byteQueryChunk #-}
 byteQueryChunk :: BinaryParser (QueryChunk Word8)
 byteQueryChunk =
   do
@@ -84,12 +86,14 @@ byteQueryChunk =
       63 -> failure ("Invalid query character: \"?\"")
       _ -> return (DecodedQueryChunk firstByte)
 
+{-# INLINE charQueryChunk #-}
 charQueryChunk :: BinaryParser (QueryChunk Char)
 charQueryChunk =
   byteQueryChunk >>= \case
     DecodedQueryChunk x -> DecodedQueryChunk <$> interpretedUTF8CharDecoderWithByte E.decodeByte x
     SpecialQueryChunk x -> return (SpecialQueryChunk x)
 
+{-# INLINE interpretedUTF8CharDecoderWithByte #-}
 interpretedUTF8CharDecoderWithByte :: E.Decoder -> Word8 -> BinaryParser Char
 interpretedUTF8CharDecoderWithByte decoder x =
   case decoder x of
@@ -106,6 +110,7 @@ interpretedUTF8CharDecoderWithByte decoder x =
     E.Failed byte1 byte2 byte3 byte4 ->
       failure ("Improper UTF8 byte sequence: " <> foldMap (fromString . show) [byte1, byte2, byte3, byte4])
 
+{-# INLINE percentEncodedByteBody #-}
 percentEncodedByteBody :: BinaryParser Word8
 percentEncodedByteBody =
   combine <$> hexByte <*> hexByte
@@ -113,6 +118,7 @@ percentEncodedByteBody =
     combine l r =
       shiftL l 4 .|. r
 
+{-# INLINE hexByte #-}
 hexByte :: BinaryParser Word8
 hexByte =
   do
@@ -125,6 +131,7 @@ hexByte =
           then return (x - 87)
           else failure ("Not a hexadecimal byte: " <> (fromString . show) x)
 
+{-# INLINE byteWhichIs #-}
 byteWhichIs :: Word8 -> BinaryParser ()
 byteWhichIs expected =
   do
