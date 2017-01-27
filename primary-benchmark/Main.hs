@@ -9,7 +9,7 @@ import qualified Network.HTTP.Types.URI as E
 main =
   defaultMain $
   [
-    bench "" $ nf A.query $! inputOfSize 10
+    bench "" $ nf (either (error . show) id . A.query) $! inputOfSize 10
   ]
 
 
