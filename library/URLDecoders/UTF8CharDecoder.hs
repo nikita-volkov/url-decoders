@@ -7,15 +7,15 @@ import qualified Data.Text.Internal.Unsafe.Char as B
 
 
 data Decoding =
-  Unfinished !Decoder |
   Finished !Char |
+  Unfinished !Decoder |
   Failed !Word8 !Word8 !Word8 !Word8
 
 type Decoder =
   Word8 -> Decoding
 
 {-# INLINE decodeByte #-}
-decodeByte :: Word8 -> Decoding
+decodeByte :: Decoder
 decodeByte byte1 =
   if A.validate1 byte1
     then
