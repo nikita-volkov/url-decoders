@@ -39,6 +39,7 @@ library
   other-modules:
     URLDecoders.BinaryParser
     URLDecoders.ByteString
+    URLDecoders.ByteString.Builder
   ghc-options:
     -funbox-strict-fields
   default-extensions:

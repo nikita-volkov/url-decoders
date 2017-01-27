@@ -9,7 +9,7 @@ import qualified Data.ByteString as C
 import qualified Data.Text as D
 import qualified Data.Text.Encoding as E
 import qualified Data.Text.Encoding.Error as F
-import qualified URLDecoders.ByteString as G
+import qualified URLDecoders.ByteString.Builder as G
 
 
 data QueryByte =
@@ -21,36 +21,34 @@ query =
   recur A.empty
   where
     recur map =
-      accumulateKey []
+      accumulateKey mempty
       where
-        accumulateKey bytes =
+        accumulateKey accumulator =
           optional queryByte >>= \case
             Just x -> case x of
               DecodedQueryByte byte -> addByte byte
               SpecialQueryByte byte -> case byte of
-                61 -> accumulateValue key []
+                61 -> accumulateValue key mempty
                 38 -> recur (updatedMap key [])
                 91 -> finalizeArrayDeclaration <|> failure ("Broken array declaration at key \"" <> key <> "\"")
                 93 -> failure "Unexpected character: \"]\""
                 _ -> addByte byte
-            Nothing -> if length == 0
+            Nothing -> if G.toLength accumulator == 0
               then return map
               else return (updatedMap key [])
           where
             addByte byte =
-              accumulateKey (byte : bytes)
+              accumulateKey (accumulator <> G.byte byte)
             finalizeArrayDeclaration =
               do
                 byteWhichIs 93
                 byte >>= \case
-                  61 -> accumulateValue key []
+                  61 -> accumulateValue key mempty
                   63 -> recur (updatedMap key [])
                   x -> failure ("Unexpected byte: " <> (fromString . show) x)
-            length =
-              BasePrelude.length bytes
             key =
-              E.decodeUtf8With F.lenientDecode (G.packReverseBytesWithLength length bytes)
-        accumulateValue key bytes =
+              E.decodeUtf8With F.lenientDecode (G.toByteString accumulator)
+        accumulateValue key accumulator =
           optional queryByte >>= \case
             Just x -> case x of
               DecodedQueryByte byte -> appendDecodedChar byte
@@ -60,11 +58,9 @@ query =
             Nothing -> return (updatedMap key [value])
           where
             appendDecodedChar byte =
-              accumulateValue key (byte : bytes)
-            length =
-              BasePrelude.length bytes
+              accumulateValue key (accumulator <> G.byte byte)
             value =
-              E.decodeUtf8With F.lenientDecode (G.packReverseBytesWithLength length bytes)
+              E.decodeUtf8With F.lenientDecode (G.toByteString accumulator)
         updatedMap key value =
           A.insertWith (<>) key value map
 
