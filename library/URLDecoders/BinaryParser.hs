@@ -29,14 +29,14 @@ query =
             Just x -> case x of
               DecodedQueryByte byte -> addByte byte
               SpecialQueryByte byte -> case byte of
-                61 -> accumulateValue key mempty
-                38 -> recur (updatedMap key [])
-                91 -> finalizeArrayDeclaration <|> failure ("Broken array declaration at key \"" <> key <> "\"")
+                61 -> decodeKey >>= \key -> accumulateValue key mempty
+                38 -> decodeKey >>= \key -> recur (updatedMap key [])
+                91 -> finalizeArrayDeclaration <|> failure ("Broken array declaration")
                 93 -> failure "Unexpected character: \"]\""
                 _ -> addByte byte
             Nothing -> if G.toLength accumulator == 0
               then return map
-              else return (updatedMap key [])
+              else decodeKey >>= \key -> return (updatedMap key [])
           where
             addByte byte =
               accumulateKey (accumulator <> G.byte byte)
@@ -44,24 +44,24 @@ query =
               do
                 byteWhichIs 93
                 byte >>= \case
-                  61 -> accumulateValue key mempty
-                  63 -> recur (updatedMap key [])
+                  61 -> decodeKey >>= \key -> accumulateValue key mempty
+                  63 -> decodeKey >>= \key -> recur (updatedMap key [])
                   x -> failure ("Unexpected byte: " <> (fromString . show) x)
-            key =
-              E.decodeUtf8With F.lenientDecode (G.toByteString accumulator)
+            decodeKey =
+              decodeUTF8 (G.toByteString accumulator)
         accumulateValue key accumulator =
           optional queryByte >>= \case
             Just x -> case x of
               DecodedQueryByte byte -> appendDecodedChar byte
               SpecialQueryByte byte -> case byte of
-                38 -> recur (updatedMap key [value])
+                38 -> decodeValue >>= \value -> recur (updatedMap key [value])
                 _ -> appendDecodedChar byte
-            Nothing -> return (updatedMap key [value])
+            Nothing -> decodeValue >>= \value -> return (updatedMap key [value])
           where
             appendDecodedChar byte =
               accumulateValue key (accumulator <> G.byte byte)
-            value =
-              E.decodeUtf8With F.lenientDecode (G.toByteString accumulator)
+            decodeValue =
+              decodeUTF8 (G.toByteString accumulator)
         updatedMap key value =
           A.insertWith (<>) key value map
 
