@@ -19,9 +19,9 @@ data QueryByte =
 {-# INLINE query #-}
 query :: BinaryParser (A.HashMap Text [Text])
 query =
-  recur A.empty
+  accumulateEntries A.empty
   where
-    recur map =
+    accumulateEntries map =
       accumulateKey mempty
       where
         accumulateKey accumulator =
@@ -30,7 +30,7 @@ query =
               DecodedQueryByte byte -> addByte byte
               SpecialQueryByte byte -> case byte of
                 61 -> decodeKey >>= \key -> accumulateValue key mempty
-                38 -> decodeKey >>= \key -> recur (updatedMap key [])
+                38 -> decodeKey >>= \key -> accumulateEntries (updatedMap key [])
                 91 -> finalizeArrayDeclaration <|> failure ("Broken array declaration")
                 93 -> failure "Unexpected character: \"]\""
                 _ -> addByte byte
@@ -45,20 +45,20 @@ query =
                 byteWhichIs 93
                 byte >>= \case
                   61 -> decodeKey >>= \key -> accumulateValue key mempty
-                  63 -> decodeKey >>= \key -> recur (updatedMap key [])
+                  63 -> decodeKey >>= \key -> accumulateEntries (updatedMap key [])
                   x -> failure ("Unexpected byte: " <> (fromString . show) x)
             decodeKey =
               decodeUTF8 (G.toByteString accumulator)
         accumulateValue key accumulator =
           optional queryByte >>= \case
             Just x -> case x of
-              DecodedQueryByte byte -> appendDecodedChar byte
+              DecodedQueryByte byte -> addByte byte
               SpecialQueryByte byte -> case byte of
-                38 -> decodeValue >>= \value -> recur (updatedMap key [value])
-                _ -> appendDecodedChar byte
+                38 -> decodeValue >>= \value -> accumulateEntries (updatedMap key [value])
+                _ -> addByte byte
             Nothing -> decodeValue >>= \value -> return (updatedMap key [value])
           where
-            appendDecodedChar byte =
+            addByte byte =
               accumulateValue key (accumulator <> G.byte byte)
             decodeValue =
               decodeUTF8 (G.toByteString accumulator)
