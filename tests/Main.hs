@@ -47,7 +47,7 @@ main =
       assertEqual "" (Right (D.fromList [("a", ["b"])])) (A.query "a=b#blablabla")
     ,
     testCase "Failure" $ do
-      assertEqual "" (Left "Broken array declaration at key \"a\"") (A.query "a[")
+      assertEqual "" (Left "Broken array declaration") (A.query "a[")
       assertEqual "" (Left "Unexpected character: \"]\"") (A.query "a]")
-      assertEqual "" (Left "Broken array declaration at key \"a\"") (A.query "a[]b")
+      assertEqual "" (Left "Broken array declaration") (A.query "a[]b")
   ]
