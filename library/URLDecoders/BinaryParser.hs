@@ -16,9 +16,9 @@ import qualified URLDecoders.PercentEncoding as H
 data QueryByte =
   DecodedQueryByte !Word8 | SpecialQueryByte !Word8
 
-{-# INLINE query #-}
-query :: BinaryParser (A.HashMap Text [Text])
-query =
+{-# INLINE utf8Query #-}
+utf8Query :: BinaryParser (A.HashMap Text [Text])
+utf8Query =
   accumulateEntries A.empty
   where
     accumulateEntries map =
@@ -62,6 +62,55 @@ query =
               accumulateValue key (accumulator <> G.byte byte)
             decodeValue =
               decodeUTF8 (G.toByteString accumulator)
+        updatedMap key value =
+          A.insertWith (<>) key value map
+
+{-# INLINE asciiQuery #-}
+asciiQuery :: BinaryParser (A.HashMap ByteString [ByteString])
+asciiQuery =
+  accumulateEntries A.empty
+  where
+    accumulateEntries map =
+      accumulateKey mempty
+      where
+        accumulateKey accumulator =
+          optional queryByte >>= \case
+            Just x -> case x of
+              DecodedQueryByte byte -> addByte byte
+              SpecialQueryByte byte -> case byte of
+                61 -> accumulateValue key mempty
+                38 -> accumulateEntries (updatedMap key [])
+                91 -> finalizeArrayDeclaration <|> failure ("Broken array declaration")
+                93 -> failure "Unexpected character: \"]\""
+                _ -> addByte byte
+            Nothing -> if G.toLength accumulator == 0
+              then return map
+              else return (updatedMap key [])
+          where
+            addByte byte =
+              accumulateKey (accumulator <> G.byte byte)
+            finalizeArrayDeclaration =
+              do
+                byteWhichIs 93
+                byte >>= \case
+                  61 -> accumulateValue key mempty
+                  63 -> accumulateEntries (updatedMap key [])
+                  x -> failure ("Unexpected byte: " <> (fromString . show) x)
+            key =
+              G.toByteString accumulator
+        accumulateValue key accumulator =
+          optional queryByte >>= \case
+            Just x -> case x of
+              DecodedQueryByte byte -> addByte byte
+              SpecialQueryByte byte -> case byte of
+                38 -> accumulateEntries (updatedMap key [value])
+                _ -> addByte byte
+            Nothing -> return (updatedMap key [value])
+          where
+            addByte byte =
+              accumulateValue key (accumulator <> G.byte byte)
+            value =
+              G.toByteString accumulator
         updatedMap key value =
           A.insertWith (<>) key value map
 

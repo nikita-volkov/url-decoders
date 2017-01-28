@@ -12,12 +12,22 @@ import qualified Network.HTTP.Types.URI as E
 main =
   defaultMain $
   [
-    subjectBenchmark "urlDecodersSubject" urlDecodersSubject
+    bgroup "url-decoders" $
+    [
+      subjectBenchmark "ascii" urlDecodersASCIISubject
+      ,
+      subjectBenchmark "utf8" urlDecodersUTF8Subject
+    ]
     ,
-    subjectBenchmark "httpTypesSubject" httpTypesSubject
+    bgroup "http-types" $
+    [
+      subjectBenchmark "ascii" httpTypesASCIISubject
+      ,
+      subjectBenchmark "utf8" httpTypesUTF8Subject
+    ]
   ]
 
-subjectBenchmark :: String -> Subject -> Benchmark
+subjectBenchmark :: NFData a => String -> Subject a -> Benchmark
 subjectBenchmark title subject =
   bgroup title $
   [
@@ -35,15 +45,27 @@ subjectBenchmark title subject =
 -- * Subjects
 -------------------------
 
-type Subject =
-  ByteString -> HashMap Text [Text]
+type Subject a =
+  ByteString -> HashMap a [a]
 
-urlDecodersSubject :: Subject
-urlDecodersSubject =
-  either (error . show) id . A.query
+urlDecodersASCIISubject :: Subject ByteString
+urlDecodersASCIISubject =
+  either (error . show) id . A.asciiQuery
 
-httpTypesSubject :: Subject
-httpTypesSubject =
+urlDecodersUTF8Subject :: Subject Text
+urlDecodersUTF8Subject =
+  either (error . show) id . A.utf8Query
+
+httpTypesASCIISubject :: Subject ByteString
+httpTypesASCIISubject =
+  foldl' step D.empty .
+  E.parseQuery
+  where
+    step map (key, value) =
+      D.insertWith (<>) key (maybe [] (: []) value) map
+
+httpTypesUTF8Subject :: Subject Text
+httpTypesUTF8Subject =
   foldl' step D.empty .
   E.parseQuery
   where
@@ -75,5 +97,5 @@ inputOfSize :: Int -> ByteString
 inputOfSize size =
   E.renderQuery False $
   E.queryTextToQuery $
-  map (\i -> ("abc" <> (fromString . show) i, Just "Ф漢УЙ")) $
+  map (\i -> ("abc" <> (fromString . show) i, Just "Ф漢УЙФ漢УЙФ漢УЙ")) $
   [0 .. size]

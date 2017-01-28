@@ -17,37 +17,37 @@ main =
   testGroup "All tests" $
   [
     testCase "Simple" $ do
-      assertEqual "" (Right (D.fromList [("a", ["b"])])) (A.query "a=b")
+      assertEqual "" (Right (D.fromList [("a", ["b"])])) (A.utf8Query "a=b")
     ,
     testCase "Absent value" $ do
-      assertEqual "" (Right (D.fromList [("a", [])])) (A.query "a")
+      assertEqual "" (Right (D.fromList [("a", [])])) (A.utf8Query "a")
     ,
     testCase "Empty" $ do
-      assertEqual "" (Right (D.fromList [])) (A.query "")
+      assertEqual "" (Right (D.fromList [])) (A.utf8Query "")
     ,
     testCase "Empty key" $ do
-      assertEqual "" (Right (D.fromList [("", ["1"])])) (A.query "=1")
+      assertEqual "" (Right (D.fromList [("", ["1"])])) (A.utf8Query "=1")
     ,
     testCase "Empty value" $ do
-      assertEqual "" (Right (D.fromList [("a", [""])])) (A.query "a=")
-      assertEqual "" (Right (D.fromList [("a", [""])])) (A.query "a=&")
+      assertEqual "" (Right (D.fromList [("a", [""])])) (A.utf8Query "a=")
+      assertEqual "" (Right (D.fromList [("a", [""])])) (A.utf8Query "a=&")
     ,
     testCase "Array" $ do
-      assertEqual "" (Right (D.fromList [("a", ["c", "b"])])) (A.query "a=b&a=c")
-      assertEqual "" (Right (D.fromList [("a", ["c", "b"])])) (A.query "a[]=b&a[]=c")
-      assertEqual "" (Right (D.fromList [("a", ["c", "b"])])) (A.query "a=b;a=c")
-      assertEqual "" (Right (D.fromList [("a", ["c", "b"])])) (A.query "a[]=b;a[]=c")
+      assertEqual "" (Right (D.fromList [("a", ["c", "b"])])) (A.utf8Query "a=b&a=c")
+      assertEqual "" (Right (D.fromList [("a", ["c", "b"])])) (A.utf8Query "a[]=b&a[]=c")
+      assertEqual "" (Right (D.fromList [("a", ["c", "b"])])) (A.utf8Query "a=b;a=c")
+      assertEqual "" (Right (D.fromList [("a", ["c", "b"])])) (A.utf8Query "a[]=b;a[]=c")
     ,
     testCase "Unicode" $ do
-      assertEqual "" (Right (D.fromList [("a", ["Держатель"])])) (A.query "a=%D0%94%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D0%B5%D0%BB%D1%8C")
-      assertEqual "" (Right (D.fromList [("Держатель", ["1"])])) (A.query "%D0%94%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D0%B5%D0%BB%D1%8C=1")
+      assertEqual "" (Right (D.fromList [("a", ["Держатель"])])) (A.utf8Query "a=%D0%94%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D0%B5%D0%BB%D1%8C")
+      assertEqual "" (Right (D.fromList [("Держатель", ["1"])])) (A.utf8Query "%D0%94%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D0%B5%D0%BB%D1%8C=1")
     ,
     testCase "Ending" $ do
-      assertEqual "" (Right (D.fromList [("a", ["b"])])) (A.query "a=b?blablabla")
-      assertEqual "" (Right (D.fromList [("a", ["b"])])) (A.query "a=b#blablabla")
+      assertEqual "" (Right (D.fromList [("a", ["b"])])) (A.utf8Query "a=b?blablabla")
+      assertEqual "" (Right (D.fromList [("a", ["b"])])) (A.utf8Query "a=b#blablabla")
     ,
     testCase "Failure" $ do
-      assertEqual "" (Left "Broken array declaration") (A.query "a[")
-      assertEqual "" (Left "Unexpected character: \"]\"") (A.query "a]")
-      assertEqual "" (Left "Broken array declaration") (A.query "a[]b")
+      assertEqual "" (Left "Broken array declaration") (A.utf8Query "a[")
+      assertEqual "" (Left "Unexpected character: \"]\"") (A.utf8Query "a]")
+      assertEqual "" (Left "Broken array declaration") (A.utf8Query "a[]b")
   ]
