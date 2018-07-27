@@ -80,17 +80,17 @@ httpTypesUTF8Subject =
 
 {-# NOINLINE smallInput #-}
 smallInput :: ByteString
-!smallInput =
+smallInput =
   inputOfSize 3
   
 {-# NOINLINE mediumInput #-}
 mediumInput :: ByteString
-!mediumInput =
+mediumInput =
   inputOfSize 10
 
 {-# NOINLINE largeInput #-}
 largeInput :: ByteString
-!largeInput =
+largeInput =
   inputOfSize 100
 
 inputOfSize :: Int -> ByteString

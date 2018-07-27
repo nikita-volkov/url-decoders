@@ -9,6 +9,9 @@ import qualified Foreign as D
 data Builder =
   Builder !(D.Ptr Word8 -> IO (D.Ptr Word8)) !Int
 
+instance Semigroup Builder where
+  (<>) = mappend
+
 instance Monoid Builder where
   {-# INLINE mempty #-}
   mempty =
